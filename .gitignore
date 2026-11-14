@@ -1,3 +1,1 @@
-.cabal/
-dist-*/
-network/
+dist-newstyle/
