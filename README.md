@@ -53,11 +53,3 @@ checks whether the client sees the close. The fix clears `HANDLE_FLAG_INHERIT` r
 How we hit it: a warp server spawning long-lived `wsl.exe` children. Every keep-alive connection
 open at spawn time was inherited; when warp closed an idle one, the client reused it and its
 next request hung forever.
-
-## Troubleshooting
-
-If building network's C code fails with errors from an msys2 install's headers (for example
-`undefined symbol: __local_stdio_printf_options`), your global cabal config is adding that
-install's include and library dirs (`extra-include-dirs` / `extra-lib-dirs`), which don't match
-GHC's own toolchain. Remove them, or build with a fresh cabal dir:
-`$env:CABAL_DIR = "$PWD\.cabal"; cabal update`.
