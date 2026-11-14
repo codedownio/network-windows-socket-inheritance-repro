@@ -33,7 +33,7 @@ child with std_out = CreatePipe: peer did NOT see the close within 3s (connectio
 
 ## What it shows
 
-`socket` and `accept` create inheritable handles on Windows (there is no equivalent of the `SOCK_CLOEXEC`/`FD_CLOEXEC` handling network does elsewhere). `createProcess` passes `bInheritHandles=TRUE` whenever a standard stream is redirected, even with `close_fds = True` (see haskell/process#235), so every socket open at that moment is inherited by the child. Closing the socket in the parent then doesn't close the connection: the peer never sees EOF until the child exits.
+`socket` and `accept` create inheritable handles on Windows, whereas on Unix `accept` sets `FD_CLOEXEC` (`accept4` with `SOCK_CLOEXEC`). `createProcess` passes `bInheritHandles=TRUE` whenever a standard stream is redirected, even with `close_fds = True` (see haskell/process#235), so every socket open at that moment is inherited by the child. As on Unix, the connection only closes when the last handle to it is closed, so closing the socket in the parent doesn't close it: the peer never sees EOF until the child exits.
 
 `Main.hs` accepts a connection, spawns a child that sleeps, closes the accepted socket, and checks whether the client sees the close. The fix clears `HANDLE_FLAG_INHERIT` right after `socket` and `accept`.
 
