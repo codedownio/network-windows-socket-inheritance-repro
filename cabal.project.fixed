@@ -4,4 +4,4 @@ packages: .
 source-repository-package
   type: git
   location: https://github.com/codedownio/network
-  tag: a77338dbd1e1d7fe5c1cff7bea34454f60cff80e
+  tag: 846a477a5b38a2cfa66a63d5b202f42ee9c75dd3
