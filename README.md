@@ -2,7 +2,7 @@
 
 ## The problem
 
-On Windows, a child process inherits every socket its parent has open: with `close_fds = False`, and also with `close_fds = True` as soon as any standard stream is redirected. The connection then stays open as long as the child's copy does, so when the parent closes it, the other side never sees the close. If the client sends a new request on the connection, the request hangs forever.
+On Windows, a child process inherits the sockets its parent has open, including connections the parent accepted. The connection then stays open as long as the child's copy does, so when the parent closes it, the other side never sees the close. If the client sends a new request on the connection, the request hangs forever. On Unix this can't happen to an accepted connection, which `accept` makes close-on-exec.
 
 ## Running it
 
