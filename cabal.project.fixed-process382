@@ -1,0 +1,11 @@
+-- network master plus the fix (9eb6c4c), process with haskell/process#382, each with its generated configure script committed
+packages: .
+source-repository-package
+  type: git
+  location: https://github.com/codedownio/network
+  tag: e3967303d1bd2d299f4d0b19ca0caf480b68a450
+source-repository-package
+  type: git
+  location: https://github.com/codedownio/process
+  tag: b69863997000bea108a6edc52a42575aba644f7c
+

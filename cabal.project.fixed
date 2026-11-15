@@ -1,7 +1,6 @@
+-- network master plus the fix (9eb6c4c), each with its generated configure script committed
 packages: .
-
--- network master plus the fix (c6840bd), with its generated configure script committed
 source-repository-package
   type: git
   location: https://github.com/codedownio/network
-  tag: 07c499267da37fc29cfe729d01db59219676c7c3
+  tag: e3967303d1bd2d299f4d0b19ca0caf480b68a450

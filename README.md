@@ -1,4 +1,4 @@
-# Windows: sockets are inheritable, so a child process keeps a closed connection open
+# Windows: accepted sockets are inheritable, so a child process keeps a closed connection open
 
 ## The problem
 
@@ -6,76 +6,110 @@ On Windows, a child process inherits every socket its parent has open: with `clo
 
 ## Running it
 
-On Windows, with GHC and cabal (e.g. from [ghcup](https://www.haskell.org/ghcup/)):
+On Windows, with GHC 9.14.2 (network master needs it, or 9.12.5, on Windows) and cabal:
 
 ```
 cabal run --project-file=cabal.project.original repro    # haskell/network master
 cabal run --project-file=cabal.project.fixed repro       # master plus the fix
 ```
 
-Running network's `configure` needs an `sh`, which ghcup's msys2 or Git for Windows (`C:\Program Files\Git\usr\bin` on the `PATH`) provides.
+`cabal.project.original-process382` and `cabal.project.fixed-process382` are the same with process from haskell/process#382. Running network's `configure` needs an `sh`, which ghcup's msys2 or Git for Windows (`C:\Program Files\Git\usr\bin` on the `PATH`) provides. The same program runs on Linux, for comparison.
+
+Each case opens two connections, spawns a child, then closes the accepted end of one connection and the outgoing end of the other, and checks whether the other end sees each close:
+
+| Child created with | Linux | Windows, master | Windows, master + fix | Windows, master + #382 | Windows, master + fix + #382 |
+|---|---|---|---|---|---|
+| `close_fds = True`, stdout inherited | ✓ ✓ | ✓ ✓ | ✓ ✓ | ✓ ✓ | ✓ ✓ |
+| `close_fds = True`, stdout piped | ✓ ✓ | ✗ ✗ | ✓ ✗ | ✓ ✓ | ✓ ✓ |
+| `close_fds = False` | ✓ ✗ | ✗ ✗ | ✓ ✗ | ✗ ✗ | ✓ ✗ |
+
+Each cell is "closing an accepted connection, closing an outgoing connection": ✓ the other end saw the close, ✗ it didn't within 3s. With no child, every column sees both. Windows 11 with GHC 9.14.2-rc3, Linux with GHC 9.12.3, network master `31c3d2c`.
 
 <details>
-<summary>Results on Windows 11, GHC 9.12.4</summary>
+<summary>Output on Windows, master</summary>
 
 ```
-original:
-  listener handle flags: 1      (HANDLE_FLAG_INHERIT set; the same before every case)
-  client handle flags: 1
-  conn handle flags: 1
-no child: peer saw the close
-child with close_fds = True, std_out = Inherit: peer saw the close
-child with close_fds = True, std_out = CreatePipe: peer did NOT see the close within 3s (connection still open)
-child with close_fds = False, std_out = Inherit: peer did NOT see the close within 3s (connection still open)
-
-fixed:
-  listener handle flags: 0
-  client handle flags: 0
-  conn handle flags: 0
-no child: peer saw the close
-child with close_fds = True, std_out = Inherit: peer saw the close
-child with close_fds = True, std_out = CreatePipe: peer saw the close
-child with close_fds = False, std_out = Inherit: peer saw the close
+no child:
+  listener inheritable, outgoing inheritable, accepted inheritable
+  closing an accepted connection: the other end saw it
+  closing an outgoing connection: the other end saw it
+child with close_fds = True, std_out = Inherit:
+  listener inheritable, outgoing inheritable, accepted inheritable
+  closing an accepted connection: the other end saw it
+  closing an outgoing connection: the other end saw it
+child with close_fds = True, std_out = CreatePipe:
+  listener inheritable, outgoing inheritable, accepted inheritable
+  closing an accepted connection: the other end did NOT see it within 3s
+  closing an outgoing connection: the other end did NOT see it within 3s
+child with close_fds = False, std_out = Inherit:
+  listener inheritable, outgoing inheritable, accepted inheritable
+  closing an accepted connection: the other end did NOT see it within 3s
+  closing an outgoing connection: the other end did NOT see it within 3s
 ```
 
 </details>
 
-For comparison, `cabal run unix-check` in `unix/` on Linux reports which sockets a child holds.
-
 <details>
-<summary>Results on Linux, GHC 9.14.1 and 9.12.3, network master and Hackage</summary>
+<summary>Output on Windows, master + fix + #382</summary>
 
 ```
-close_fds=False listener (socket): inherited by the child
-close_fds=False client (socket): inherited by the child
-close_fds=False conn (accept): not inherited
-close_fds=True listener (socket): not inherited
-close_fds=True client (socket): not inherited
-close_fds=True conn (accept): not inherited
+no child:
+  listener inheritable, outgoing inheritable, accepted not inheritable
+  closing an accepted connection: the other end saw it
+  closing an outgoing connection: the other end saw it
+child with close_fds = True, std_out = Inherit:
+  listener inheritable, outgoing inheritable, accepted not inheritable
+  closing an accepted connection: the other end saw it
+  closing an outgoing connection: the other end saw it
+child with close_fds = True, std_out = CreatePipe:
+  listener inheritable, outgoing inheritable, accepted not inheritable
+  closing an accepted connection: the other end saw it
+  closing an outgoing connection: the other end saw it
+child with close_fds = False, std_out = Inherit:
+  listener inheritable, outgoing inheritable, accepted not inheritable
+  closing an accepted connection: the other end saw it
+  closing an outgoing connection: the other end did NOT see it within 3s
+```
+
+</details>
+
+<details>
+<summary>Output on Linux</summary>
+
+```
+no child:
+  listener inheritable, outgoing inheritable, accepted not inheritable
+  closing an accepted connection: the other end saw it
+  closing an outgoing connection: the other end saw it
+child with close_fds = True, std_out = Inherit:
+  listener inheritable, outgoing inheritable, accepted not inheritable
+  closing an accepted connection: the other end saw it
+  closing an outgoing connection: the other end saw it
+child with close_fds = True, std_out = CreatePipe:
+  listener inheritable, outgoing inheritable, accepted not inheritable
+  closing an accepted connection: the other end saw it
+  closing an outgoing connection: the other end saw it
+child with close_fds = False, std_out = Inherit:
+  listener inheritable, outgoing inheritable, accepted not inheritable
+  closing an accepted connection: the other end saw it
+  closing an outgoing connection: the other end did NOT see it within 3s
 ```
 
 </details>
 
 ## Analysis
 
-Which sockets a child gets:
+Two things differ from Unix:
 
-| Child created with | Unix, network master | Windows, network master | Windows, with the fix |
-|---|---|---|---|
-| `close_fds = False` (the default for `proc`) | sockets from `socket`, not from `accept` | every socket | none |
-| `close_fds = True`, no standard stream redirected | none | none | none |
-| `close_fds = True`, a standard stream redirected | none | every socket | none |
-
-On Unix, `accept` returns a close-on-exec descriptor (`accept4` with `SOCK_CLOEXEC`), so an accepted connection is never inherited. `socket` doesn't set close-on-exec, so a listener or an outgoing connection is inherited unless `close_fds = True`.
-
-On Windows, `socket` and `accept` both return inheritable handles, and `createProcess` passes `bInheritHandles = TRUE` unless `close_fds = True` and all three standard streams are `Inherit` (haskell/process#235).
+- **Which sockets are inheritable.** On Unix, `accept` returns a close-on-exec descriptor (`accept4` with `SOCK_CLOEXEC`), and `socket` doesn't set close-on-exec. On Windows, both return inheritable handles.
+- **What `close_fds = True` does.** On Unix it closes every descriptor above 2 in the child. On Windows, `createProcess` passes `bInheritHandles = TRUE` whenever a standard stream is redirected, so the child gets every inheritable handle anyway (haskell/process#235).
 
 ## The fix
 
-[codedownio/network `windows-non-inheritable-sockets`](https://github.com/codedownio/network/tree/windows-non-inheritable-sockets) clears `HANDLE_FLAG_INHERIT` right after `socket` and `accept` on Windows, the counterpart of `FD_CLOEXEC`. For accepted connections, Windows then behaves as Unix does. For sockets from `socket` it's stricter than Unix: with `close_fds = False` a Unix child still inherits them, a Windows child doesn't.
+[codedownio/network `windows-non-inheritable-accept`](https://github.com/codedownio/network/tree/windows-non-inheritable-accept) clears `HANDLE_FLAG_INHERIT` on accepted sockets, the counterpart of `SOCK_CLOEXEC` on `accept`. [haskell/process#382](https://github.com/haskell/process/pull/382) fixes the other half: with `close_fds = True`, a child gets only its standard handles. With both, Windows behaves as Linux does in every case above, including the one case where Linux itself leaks: an outgoing connection, inherited by a child created with `close_fds = False`.
 
 ## Extra information
 
-`Main.hs` makes a listener, connects a client to it, accepts the connection, spawns a child that sleeps, closes the accepted socket, and waits 3 seconds for the client to see EOF, with no child and with each `createProcess` setting above. `original` is [haskell/network master `2071e8e`](https://github.com/haskell/network/commit/2071e8ea82b48a1c5e2404391a27d551c8197a9d) (branch `repro-original`), `fixed` the fix on it (branch `repro-fixed`); both have their generated `configure` committed, so no autoconf is needed. `+RTS --io-manager=native` gives the same results.
+The project files build network and process from commits with their generated `configure` committed, so no autoconf is needed: network branches `repro-master-configure` and `repro-accept-configure`, process branch `repro-382-with-configure` on [codedownio/process](https://github.com/codedownio/process). On Windows the repro runs under the WinIO I/O manager, which network master requires.
 
-We hit this with a warp server spawning long-lived `wsl.exe` children with redirected output.
+We hit this with a warp server spawning long-lived `wsl.exe` children with `close_fds = True` and redirected output.
