@@ -13,8 +13,8 @@ import System.Timeout
 
 -- Accept a connection, spawn a child that outlives it, close the connection, and see whether
 -- the peer gets EOF
-run :: String -> Maybe StdStream -> IO ()
-run label childStdout = do
+run :: String -> Maybe (StdStream, Bool) -> IO ()
+run label childOpts = do
   listener <- socket AF_INET Stream defaultProtocol
   bind listener (SockAddrInet 0 (tupleToHostAddress (127, 0, 0, 1)))
   listen listener 1
@@ -28,8 +28,8 @@ run label childStdout = do
     putStrLn ("  " ++ n ++ " handle flags: " ++ show flags)
 
   self <- getExecutablePath
-  child <- forM childStdout $ \s -> do
-    (_, _, _, ph) <- createProcess (proc self ["sleep"]) { std_out = s, close_fds = True }
+  child <- forM childOpts $ \(s, cf) -> do
+    (_, _, _, ph) <- createProcess (proc self ["sleep"]) { std_out = s, close_fds = cf }
     return ph
 
   close conn
@@ -51,5 +51,6 @@ main = getArgs >>= \case
   _ -> do
     hSetBuffering stdout LineBuffering
     run "no child" Nothing
-    run "child with std_out = Inherit" (Just Inherit)
-    run "child with std_out = CreatePipe" (Just CreatePipe)
+    run "child with close_fds = True, std_out = Inherit" (Just (Inherit, True))
+    run "child with close_fds = True, std_out = CreatePipe" (Just (CreatePipe, True))
+    run "child with close_fds = False, std_out = Inherit" (Just (Inherit, False))

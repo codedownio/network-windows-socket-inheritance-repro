@@ -1,0 +1,8 @@
+cabal-version: 2.4
+name:          unix-check
+version:       0
+executable unix-check
+  main-is:          Main.hs
+  build-depends:    base, directory, network, process, unix
+  default-language: Haskell2010
+  ghc-options:      -threaded
