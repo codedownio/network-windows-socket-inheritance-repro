@@ -2,7 +2,7 @@
 
 ## The problem
 
-On Windows, a child process inherits every socket its parent has open: with `close_fds = False`, and also with `close_fds = True` as soon as any standard stream is redirected. The connection then stays open as long as the child's copy does, so when the parent closes it, the other side never sees the close. A client holding it as a keep-alive connection doesn't know it's dead: it sends its next request on it, nothing ever reads it, and the request hangs forever.
+On Windows, a child process inherits every socket its parent has open: with `close_fds = False`, and also with `close_fds = True` as soon as any standard stream is redirected. The connection then stays open as long as the child's copy does, so when the parent closes it, the other side never sees the close. If the client sends a new request on the connection, the request hangs forever.
 
 ## Running it
 
